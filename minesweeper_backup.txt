@@ -1,0 +1,214 @@
+import configparser, random, os, configpy
+import tkinter as tk
+import feildinit as finit
+from tkinter import messagebox, simpledialog
+
+window = tk.Tk()
+
+window.title("Minesweeper")
+
+#prepare default values
+
+rows = 10
+cols = 10
+mines = 10
+
+field = []
+buttons = []
+
+colors = ['#FFFFFF', '#0000FF', '#008200', '#FF0000', '#000084', '#840000', '#008284', '#840084', '#000000']
+
+gameover = False
+custom_sizes = []
+
+
+def create_menu():
+    menubar = tk.Menu(window)
+    menusize = tk.Menu(window, tearoff=0)
+    menusize.add_command(label = "small (10x10 with 10 mines)", command = lambda: set_size(10, 10, 10))
+    menusize.add_command(label = "medium (20x20 with 40 mines)", command = lambda: set_size(20, 20, 40))
+    menusize.add_command(label = "big (35x35 with 120 mines)", command = lambda: set_size(35, 35, 120))
+    menusize.add_command(label = "custom", command = set_custom_size)
+    menusize.add_separator()
+    for x in range(0, len(custom_sizes)):
+        menusize.add_command(label = str(custom_sizes[x][0]) + "x" + str(custom_sizes[x][1]) + " with " + str(custom_sizes[x][2]) + " mines", command = lambda custom_sizes=custom_sizes: set_size(custom_sizes[x][0], custom_sizes[x][1], custom_sizes[x][2]))
+    menubar.add_cascade(label = "size", menu = menusize)
+    menubar.add_command(label = "exit", command = lambda: window.destroy())
+    window.config(menu = menubar)
+
+
+def set_custom_size():
+    global custom_sizes
+    r = tk.simpledialog.askinteger("Custom size", "Enter amount of rows")
+    c = tk.simpledialog.askinteger("Custom size", "Enter amount of columns")
+    m = tk.simpledialog.askinteger("Custom size", "Enter amount of mines")
+    while m > r*c:
+        m = tk.simpledialog.askinteger("Custom size", "Maximum mines for this dimension is: " + str(r*c) + "\nEnter amount of mines")
+    custom_sizes.insert(0, (r,c,m))
+    custom_sizes = custom_sizes[0:5]
+    set_size(r,c,m)
+    create_menu()
+
+def set_size(r,c,m):
+    global rows, cols, mines
+    rows = r
+    cols = c
+    mines = m
+    configpy.saveConfig(rows, cols, mines, custom_sizes)
+    restart_game()
+
+def prepare_game():
+    global rows, cols, mines, field
+    field = []
+    for x in range(0, rows):
+        field.append([])
+        for y in range(0, cols):
+            #add button and init value for game
+            field[x].append(0)
+    #generate mines
+    for _ in range(0, mines):
+        x = random.randint(0, rows-1)
+        y = random.randint(0, cols-1)
+        #prevent spawning mine on top of each other
+        while field[x][y] == -1:
+            x = random.randint(0, rows-1)
+            y = random.randint(0, cols-1)
+        field[x][y] = -1
+        if x != 0:
+            if y != 0:
+                if field[x-1][y-1] != -1:
+                    field[x-1][y-1] = int(field[x-1][y-1]) + 1
+            if field[x-1][y] != -1:
+                field[x-1][y] = int(field[x-1][y]) + 1
+            if y != cols-1:
+                if field[x-1][y+1] != -1:
+                    field[x-1][y+1] = int(field[x-1][y+1]) + 1
+        if y != 0:
+            if field[x][y-1] != -1:
+                field[x][y-1] = int(field[x][y-1]) + 1
+        if y != cols-1:
+            if field[x][y+1] != -1:
+                field[x][y+1] = int(field[x][y+1]) + 1
+        if x != rows-1:
+            if y != 0:
+                if field[x+1][y-1] != -1:
+                    field[x+1][y-1] = int(field[x+1][y-1]) + 1
+            if field[x+1][y] != -1:
+                field[x+1][y] = int(field[x+1][y]) + 1
+            if y != cols-1:
+                if field[x+1][y+1] != -1:
+                    field[x+1][y+1] = int(field[x+1][y+1]) + 1
+
+def prepare_window():
+    global rows, cols, buttons
+    tk.Button(window, text = "Restart", command = restart_game).grid(row = 0, column = 0, columnspan = cols, sticky = tk.N+tk.W+tk.S+tk.E)
+    buttons = []
+    for x in range(0, rows):
+        buttons.append([])
+        for y in range(0, cols):
+            b = tk.Button(window, text = " ", width = 2, command = lambda x = x, y = y: on_left_click(x, y))
+            b.bind("<Button-3>", lambda e, x = x, y = y: on_right_click(x, y))
+            b.grid(row = x+1, column = y, sticky = tk.N+tk.W+tk.S+tk.E)
+            buttons[x].append(b)
+
+def restart_game():
+    global gameover, rows, cols, mines, field
+    gameover = False
+    #destroy all - prevent memory leak
+    for x in window.winfo_children():
+        if type(x) != tk.Menu:
+            x.destroy()
+    prepare_window()
+    field = finit.prepare_game(rows, cols, mines)
+
+def show_mines():
+    global rows, cols
+    for _x in range(0, rows):
+        for _y in range(cols):
+            if field[_x][_y] == -1:
+                buttons[_x][_y]["text"] = "*"
+
+def on_left_click(x,y):
+    global field, buttons, colors, gameover, rows, cols
+    if gameover:
+        return
+    buttons[x][y]["text"] = str(field[x][y])
+    if field[x][y] == -1:
+        buttons[x][y]["text"] = "*"
+        buttons[x][y].config(background = 'red', disabledforeground = 'black')
+        gameover = True
+        show_mines()
+        tk.messagebox.showinfo("Game Over", "You have lost.")
+        #now show all other mines
+        
+    else:
+        buttons[x][y].config(disabledforeground = colors[field[x][y]])
+    if field[x][y] == 0:
+        buttons[x][y]["text"] = " "
+        #now repeat for all buttons nearby which are 0... kek
+        empty_cell_click(x,y)
+    buttons[x][y]['state'] = 'disabled'
+    buttons[x][y].config(relief = tk.SUNKEN)
+    check_for_win()
+
+def empty_cell_click(x,y):
+    global field, buttons, colors, rows, cols
+    if buttons[x][y]["state"] == "disabled":
+        return
+    if field[x][y] != 0:
+        buttons[x][y]["text"] = str(field[x][y])
+    else:
+        buttons[x][y]["text"] = " "
+    buttons[x][y].config(disabledforeground = colors[field[x][y]])
+    buttons[x][y].config(relief = tk.SUNKEN)
+    buttons[x][y]['state'] = 'disabled'
+    if field[x][y] == 0:
+        if x != 0 and y != 0:
+            empty_cell_click(x-1,y-1)
+        if x != 0:
+            empty_cell_click(x-1,y)
+        if x != 0 and y != cols-1:
+            empty_cell_click(x-1,y+1)
+        if y != 0:
+            empty_cell_click(x,y-1)
+        if y != cols-1:
+            empty_cell_click(x,y+1)
+        if x != rows-1 and y != 0:
+            empty_cell_click(x+1,y-1)
+        if x != rows-1:
+            empty_cell_click(x+1,y)
+        if x != rows-1 and y != cols-1:
+            empty_cell_click(x+1,y+1)
+
+def on_right_click(x,y):
+    global buttons
+    if gameover:
+        return
+    if buttons[x][y]["text"] == "?":
+        buttons[x][y]["text"] = " "
+        buttons[x][y]["state"] = "normal"
+    elif buttons[x][y]["text"] == " " and buttons[x][y]["state"] == "normal":
+        buttons[x][y]["text"] = "?"
+        buttons[x][y]["state"] = "disabled"
+
+def check_for_win():
+    global buttons, field, rows, cols
+    win = True
+    for x in range(0, rows):
+        for y in range(0, cols):
+            if field[x][y] != -1 and buttons[x][y]["state"] == "normal":
+                win = False
+    if win:
+        show_mines()
+        tk.messagebox.showinfo("Gave Over", "You have won.")
+
+if os.path.exists("config.ini"):
+    rows, cols, mines = configpy.loadConfig(custom_sizes)
+else:
+    configpy.saveConfig()
+
+create_menu()
+
+prepare_window()
+field = finit.prepare_game(rows, cols, mines)
+window.mainloop()
